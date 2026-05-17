@@ -8,7 +8,7 @@ This project combines embedded systems, wireless communication, and real-time vi
 
 ## 🌌 Overview
 
-The onboard ESP32 collects motion and altitude data from sensors during flight and streams it in real time to a ground station.
+The onboard ESP32 C3 collects motion and altitude data from sensors during flight and streams it in real time to a ground station.
 
 A custom web dashboard transforms this data into a live interactive experience:
 - 3D model that rotates based on real sensor orientation
@@ -20,8 +20,8 @@ A custom web dashboard transforms this data into a live interactive experience:
 
 ## 🛰 System Architecture
 
-Onboard Flight Controller (ESP32)  
-→ Sensor Data (IMU + Altitude)  
+Onboard Flight Controller (ESP32 C3)  
+→ Sensor Data (IMU)  
 → Wireless Telemetry Stream  
 → Web Ground Station  
 → 3D Visualization + Flight Analytics  
@@ -31,7 +31,7 @@ Onboard Flight Controller (ESP32)
 ## 🧠 Features
 
 ### 📡 Live Telemetry
-Continuous streaming of sensor data from the ESP32 during flight.
+Continuous streaming of sensor data from the ESP32 C3 during flight.
 
 ### 🧭 3D Orientation Model
 Real-time visualization of pitch, roll, and yaw using sensor input.
@@ -49,11 +49,10 @@ Browser-based mission control interface for real-time monitoring.
 
 ## 📊 Data Format
 
-ax, ay, az, gx, gy, gz, altitude, timestamp
+ax, ay, az, gx, gy, gz, timestamp
 
 - ax, ay, az → acceleration  
-- gx, gy, gz → angular velocity  
-- altitude → height measurement  
+- gx, gy, gz → angular velocity   
 - timestamp → time reference  
 
 ---
@@ -72,11 +71,10 @@ It turns raw sensor data into a live understanding of flight behavior.
 
 ## 🧰 Hardware
 
-- ESP32 Development Board  
-- IMU Sensor (gyro + accelerometer)  
-- Altitude sensor  
-- Battery system  
-- Wireless communication (Wi-Fi / telemetry)
+- ESP32 Development Board
+- ESP32 C3 Development Board  
+- IMU Sensor (gyro + accelerometer)    
+- Battery system 
 
 ---
 

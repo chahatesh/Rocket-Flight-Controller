@@ -1,0 +1,7 @@
+MPU6050
+   ↓ I2C
+ESP32-C3 (Flight Computer)
+   ↓ ESP-NOW LR
+ESP32 Receiver (Ground Station)
+   ↓ Serial
+Web Dashboard - https://rocket-dashboard.wasmer.app/

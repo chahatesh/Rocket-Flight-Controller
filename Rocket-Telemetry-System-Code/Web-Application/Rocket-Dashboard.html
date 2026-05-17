@@ -1,0 +1,1548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rocket Control Hub v4</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --bg:#050810; --panel:#0a0f1e; --border:#1a2744;
+  --accent:#00d4ff; --accent2:#ff4d00; --warn:#ffb800;
+  --green:#00ff88; --purple:#b06aff; --text:#c8deff; --dim:#3a5080;
+  --glow:0 0 12px rgba(0,212,255,0.4);
+  --glow-red:0 0 16px rgba(255,77,0,0.6);
+  --glow-green:0 0 12px rgba(0,255,136,0.4);
+  --glow-purple:0 0 12px rgba(176,106,255,0.4);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:100;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.07) 2px,rgba(0,0,0,0.07) 4px);}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);background-size:40px 40px;}
+
+/* HEADER */
+header{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:10px 22px;border-bottom:1px solid var(--border);background:linear-gradient(90deg,rgba(0,212,255,0.06),transparent);flex-wrap:wrap;gap:8px;}
+.logo{font-family:'Orbitron',monospace;font-weight:900;font-size:1.1rem;letter-spacing:0.14em;color:var(--accent);text-shadow:var(--glow);display:flex;align-items:center;gap:10px;}
+.header-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.clock{color:var(--accent);font-size:0.76rem;letter-spacing:0.1em;}
+.rec-indicator{display:none;align-items:center;gap:6px;font-size:0.66rem;color:var(--accent2);font-family:'Orbitron',monospace;letter-spacing:0.1em;}
+.rec-indicator.active{display:flex;}
+.rec-dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);animation:blink 0.8s infinite;}
+
+/* STATUS */
+.status-banner{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:8px 22px;font-family:'Orbitron',monospace;font-size:0.85rem;font-weight:700;letter-spacing:0.16em;background:rgba(0,0,0,0.4);border-bottom:1px solid var(--border);transition:all 0.4s;}
+.status-center{display:flex;align-items:center;gap:10px;}
+.status-dot{width:9px;height:9px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;}
+.status-right{font-size:0.6rem;color:var(--dim);}
+.status-banner.idle{color:var(--dim);}
+.status-banner.flight{color:var(--warn);border-color:var(--warn);text-shadow:0 0 10px rgba(255,184,0,.5);}
+.status-banner.launch{color:var(--accent2);border-color:var(--accent2);text-shadow:var(--glow-red);animation:pulse-red 0.6s infinite;}
+.status-banner.descent{color:var(--purple);border-color:var(--purple);text-shadow:var(--glow-purple);}
+.status-banner.waiting{color:var(--dim);}
+.status-banner.calibrating{color:var(--warn);animation:pulse-warn 0.5s infinite;}
+.status-banner.playback{color:var(--green);border-color:var(--green);text-shadow:var(--glow-green);}
+@keyframes pulse-red{0%,100%{opacity:1}50%{opacity:.55}}
+@keyframes pulse-warn{0%,100%{opacity:1}50%{opacity:.6}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* SIGNAL BADGE in header */
+.sig-badge{
+  display:flex;align-items:center;gap:5px;
+  font-family:'Orbitron',monospace;font-size:.62rem;font-weight:700;letter-spacing:.1em;
+  padding:4px 10px;border-radius:3px;border:1px solid var(--dim);color:var(--dim);
+  transition:all .3s;
+}
+.sig-badge.ok   {border-color:var(--green);color:var(--green);text-shadow:var(--glow-green);}
+.sig-badge.weak {border-color:var(--warn);color:var(--warn);text-shadow:0 0 8px rgba(255,184,0,.4);}
+.sig-badge.lost {border-color:var(--accent2);color:var(--accent2);text-shadow:var(--glow-red);animation:blink .5s infinite;}
+.sig-dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor;}
+
+/* NO SIGNAL FULL-SCREEN ALERT */
+#noSignalOverlay{
+  display:none;position:fixed;inset:0;z-index:9999;
+  background:rgba(4,0,0,.97);
+  flex-direction:column;align-items:center;justify-content:center;gap:28px;
+  font-family:'Orbitron',monospace;text-align:center;
+  animation:nosig-pulse 1s infinite;
+}
+#noSignalOverlay.active{display:flex;}
+@keyframes nosig-pulse{
+  0%,100%{background:rgba(4,0,0,.97);}
+  50%{background:rgba(60,0,0,.97);}
+}
+.nosig-icon{font-size:6rem;animation:nosig-shake .4s infinite;}
+@keyframes nosig-shake{
+  0%,100%{transform:translateX(0);}
+  25%{transform:translateX(-8px);}
+  75%{transform:translateX(8px);}
+}
+.nosig-title{
+  font-size:clamp(2rem,6vw,4.5rem);font-weight:900;letter-spacing:.2em;
+  color:#ff2200;text-shadow:0 0 40px rgba(255,34,0,.8),0 0 80px rgba(255,34,0,.4);
+  animation:nosig-flicker .15s infinite;
+}
+@keyframes nosig-flicker{0%,100%{opacity:1}50%{opacity:.85}}
+.nosig-sub{font-size:clamp(.9rem,2.5vw,1.4rem);color:#ff8866;letter-spacing:.15em;opacity:.9;}
+.nosig-detail{font-size:.85rem;color:#663333;letter-spacing:.1em;font-family:'Share Tech Mono',monospace;}
+.nosig-timer{font-size:1.6rem;color:#ff4422;letter-spacing:.2em;text-shadow:0 0 20px rgba(255,68,34,.6);}
+.nosig-bars{display:flex;gap:6px;align-items:flex-end;margin-top:8px;}
+.nosig-bar{width:18px;border-radius:2px;background:#330000;animation:nosig-bar-anim 1.2s infinite;}
+.nosig-bar:nth-child(1){height:12px;animation-delay:0s;}
+.nosig-bar:nth-child(2){height:20px;animation-delay:.15s;}
+.nosig-bar:nth-child(3){height:28px;animation-delay:.3s;}
+.nosig-bar:nth-child(4){height:20px;animation-delay:.45s;}
+.nosig-bar:nth-child(5){height:12px;animation-delay:.6s;}
+@keyframes nosig-bar-anim{0%,100%{background:#330000;}50%{background:#cc2200;}}
+.nosig-dismiss{
+  margin-top:10px;background:transparent;border:2px solid #ff2200;color:#ff2200;
+  font-family:'Orbitron',monospace;font-size:.75rem;font-weight:700;letter-spacing:.15em;
+  padding:10px 28px;border-radius:4px;cursor:pointer;
+  transition:all .2s;
+}
+.nosig-dismiss:hover{background:#ff2200;color:#000;box-shadow:0 0 20px rgba(255,34,0,.5);}
+
+/* MAIN LAYOUT */
+main{position:relative;z-index:10;flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:13px 16px;}
+
+/* PANEL */
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px 14px;position:relative;overflow:hidden;}
+.panel::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.4;}
+.panel.p-green::before{background:linear-gradient(90deg,transparent,var(--green),transparent);}
+.panel.p-warn::before{background:linear-gradient(90deg,transparent,var(--warn),transparent);}
+.panel.p-red::before{background:linear-gradient(90deg,transparent,var(--accent2),transparent);}
+.panel.p-purple::before{background:linear-gradient(90deg,transparent,var(--purple),transparent);}
+.panel.p-cyan::before{background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+.panel-label{font-size:0.58rem;letter-spacing:0.18em;color:var(--dim);text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:7px;}
+.panel-label::after{content:'';flex:1;height:1px;background:var(--border);}
+.panel-label small{font-size:0.5rem;letter-spacing:.05em;color:var(--dim);opacity:.7;white-space:nowrap;}
+.big-value{font-family:'Orbitron',monospace;font-size:2.4rem;font-weight:700;line-height:1;transition:color .3s,text-shadow .3s;}
+.unit{font-size:.8rem;color:var(--dim);margin-left:3px;}
+.sub{font-size:.65rem;color:var(--dim);margin-top:4px;}
+.c-cyan{color:var(--accent);text-shadow:var(--glow);}
+.c-green{color:var(--green);text-shadow:var(--glow-green);}
+.c-warn{color:var(--warn);text-shadow:0 0 12px rgba(255,184,0,.4);}
+.c-red{color:var(--accent2);text-shadow:var(--glow-red);}
+.c-purple{color:var(--purple);text-shadow:var(--glow-purple);}
+.c-dim{color:var(--dim);}
+
+/* G BARS */
+.gauge-wrap{display:flex;align-items:flex-end;gap:3px;margin-top:8px;height:22px;}
+.bar{flex:1;border-radius:2px;background:var(--border);transition:background .2s,height .12s;min-height:4px;}
+
+/* ANGLES */
+.angle-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:5px;}
+.angle-name{font-size:.56rem;letter-spacing:.13em;color:var(--dim);margin-bottom:3px;}
+.angle-value{font-family:'Orbitron',monospace;font-size:1.55rem;font-weight:700;color:var(--accent);text-shadow:var(--glow);}
+
+/* AHI */
+.horizon-panel{grid-row:span 2;display:flex;flex-direction:column;}
+.horizon-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:5px;}
+.ahi-svg{width:100%;max-width:180px;height:auto;}
+
+/* ALT CHART */
+.alt-panel{grid-column:span 2;}
+.chart-wrap{margin-top:6px;}
+canvas#altChart{width:100%;height:80px;display:block;}
+
+/* AXES */
+.vector-row{display:flex;gap:7px;margin-top:5px;}
+.axis-item{flex:1;}
+.axis-name{font-size:.54rem;color:var(--dim);margin-bottom:3px;}
+.axis-bar-wrap{height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:3px;}
+.axis-bar-fill{height:100%;border-radius:3px;transition:width .12s;}
+.axis-val{font-size:.7rem;color:var(--text);}
+
+/* STATS */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:5px;}
+.stat-name{font-size:.53rem;letter-spacing:.12em;color:var(--dim);margin-bottom:2px;}
+.stat-val{font-family:'Orbitron',monospace;font-size:1rem;font-weight:700;}
+/* GYRO */
+.gyro-row{display:flex;gap:6px;margin-top:6px;}
+.gyro-item{flex:1;text-align:center;}
+.gyro-name{font-size:.5rem;color:var(--dim);margin-bottom:2px;letter-spacing:.1em;}
+.gyro-val{font-family:'Orbitron',monospace;font-size:.9rem;font-weight:700;color:var(--purple);}
+
+/* PACKETS */
+.packets-row{display:flex;align-items:baseline;gap:7px;}
+.pkt-count{font-family:'Orbitron',monospace;font-size:1.8rem;font-weight:700;color:var(--green);text-shadow:var(--glow-green);}
+.pkt-rate{font-size:.68rem;color:var(--dim);}
+
+/* BUTTONS */
+.connect-panel{grid-column:span 2;}
+.ctrl-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:6px;}
+.port-input{background:rgba(0,212,255,.05);border:1px solid var(--border);border-radius:3px;color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:.78rem;padding:5px 8px;width:80px;outline:none;transition:border-color .2s;}
+.port-input:focus{border-color:var(--accent);}
+.btn{background:transparent;border:1px solid var(--accent);color:var(--accent);font-family:'Orbitron',monospace;font-size:.58rem;font-weight:700;letter-spacing:.08em;padding:6px 11px;border-radius:3px;cursor:pointer;transition:all .18s;white-space:nowrap;}
+.btn:hover{background:var(--accent);color:var(--bg);box-shadow:var(--glow);}
+.btn.danger{border-color:var(--accent2);color:var(--accent2);}
+.btn.danger:hover{background:var(--accent2);color:#fff;box-shadow:var(--glow-red);}
+.btn.bwarn{border-color:var(--warn);color:var(--warn);}
+.btn.bwarn:hover{background:var(--warn);color:var(--bg);}
+.btn.bgreen{border-color:var(--green);color:var(--green);}
+.btn.bgreen:hover{background:var(--green);color:var(--bg);}
+.btn.bpurple{border-color:var(--purple);color:var(--purple);}
+.btn.bpurple:hover{background:var(--purple);color:#fff;}
+.btn:disabled{opacity:.3;cursor:not-allowed;pointer-events:none;}
+.conn-status{display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--dim);}
+.conn-dot{width:7px;height:7px;border-radius:50%;background:var(--dim);}
+.conn-dot.live{background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 1.2s infinite;}
+
+/* LOG */
+.log-panel{grid-column:span 2;}
+.log-box{height:72px;overflow-y:auto;font-size:.67rem;color:var(--dim);line-height:1.65;padding:3px 0;scrollbar-width:thin;scrollbar-color:var(--border) transparent;}
+.log-entry{color:var(--dim);transition:color .5s;}
+.log-entry.fresh{color:var(--accent);}
+.log-entry.lw{color:var(--warn);}
+.log-entry.le{color:var(--accent2);}
+
+/* ══════════════════════════════════
+   3D ROCKET VIEWER
+═══════════════════════════════════ */
+#rocket3d-container{
+  position:fixed;bottom:130px;right:18px;z-index:50;
+  width:220px;height:220px;
+  border:1px solid var(--border);border-radius:6px;
+  background:rgba(5,8,16,.95);overflow:hidden;
+  box-shadow:0 0 20px rgba(0,212,255,.15),0 0 0 1px rgba(0,212,255,.08);
+  cursor:pointer;transition:box-shadow .2s,border-color .2s;
+}
+#rocket3d-container:hover{box-shadow:0 0 30px rgba(0,212,255,.3),0 0 0 1px rgba(0,212,255,.25);}
+#rocket3d-container.fullscreen{
+  position:fixed;inset:0;width:100vw;height:100vh;
+  border-radius:0;border:none;z-index:500;cursor:default;
+  box-shadow:none;bottom:auto;right:auto;
+}
+#rocket3d-header{
+  position:absolute;top:0;left:0;right:0;padding:5px 10px;
+  font-family:'Orbitron',monospace;font-size:.55rem;letter-spacing:.15em;
+  color:var(--dim);background:rgba(0,0,0,.6);border-bottom:1px solid var(--border);
+  z-index:3;display:flex;align-items:center;justify-content:space-between;
+}
+#rocket3d-close{
+  display:none;background:transparent;border:1px solid var(--dim);color:var(--dim);
+  font-family:'Orbitron',monospace;font-size:.5rem;padding:2px 7px;border-radius:2px;
+  cursor:pointer;letter-spacing:.08em;transition:all .15s;
+}
+#rocket3d-close:hover{border-color:var(--accent2);color:var(--accent2);}
+#rocket3d-container.fullscreen #rocket3d-close{display:block;}
+#rocket3d-hint{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-family:'Orbitron',monospace;font-size:.52rem;letter-spacing:.1em;
+  color:rgba(0,212,255,.3);pointer-events:none;z-index:1;text-align:center;
+  transition:opacity .25s;line-height:1.8;
+}
+#rocket3d-container:hover #rocket3d-hint,
+#rocket3d-container.fullscreen #rocket3d-hint{opacity:0;}
+
+/* fullscreen bottom bar */
+#rocket3d-controls{
+  display:none;position:absolute;bottom:0;left:0;right:0;z-index:3;
+  padding:14px 22px 18px;
+  background:linear-gradient(transparent,rgba(5,8,16,.95));
+  flex-direction:column;gap:12px;
+}
+#rocket3d-container.fullscreen #rocket3d-controls{display:flex;}
+.mode-tabs{display:flex;gap:8px;}
+.mode-tab{
+  background:transparent;border:1px solid var(--border);color:var(--dim);
+  font-family:'Orbitron',monospace;font-size:.6rem;font-weight:700;
+  letter-spacing:.1em;padding:6px 16px;border-radius:3px;cursor:pointer;
+  transition:all .18s;
+}
+.mode-tab.active{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.08);}
+.mode-tab:hover:not(.active){border-color:var(--dim);color:var(--text);}
+.sim-stats{
+  display:flex;gap:24px;flex-wrap:wrap;
+  font-family:'Share Tech Mono',monospace;font-size:.68rem;color:var(--dim);
+}
+.sim-stat-val{color:var(--accent);}
+.sim-stat-val.red{color:var(--accent2);}
+.sim-stat-val.warn{color:var(--warn);}
+
+/* mini angles bar (corner mode) */
+#rocket3d-angles{
+  position:absolute;bottom:0;left:0;right:0;
+  padding:4px 8px;background:rgba(0,0,0,.65);border-top:1px solid var(--border);
+  font-size:.57rem;color:var(--dim);display:flex;justify-content:space-around;z-index:2;
+}
+#rocket3d-container.fullscreen #rocket3d-angles{display:none;}
+#rocket3d-angles span{color:var(--accent);}
+
+/* flight sim trail */
+#sim-trail-info{
+  font-size:.62rem;color:var(--dim);font-family:'Share Tech Mono',monospace;
+}
+
+/* ══════════════════════════════════
+   PLAYBACK PANEL (full-width bottom)
+═══════════════════════════════════ */
+#playback-panel{
+  position:relative;z-index:10;
+  background:var(--panel);
+  border-top:1px solid var(--border);
+  padding:10px 18px 12px;
+}
+.pb-top{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
+.pb-title{font-family:'Orbitron',monospace;font-size:.65rem;letter-spacing:.15em;color:var(--accent);}
+.pb-info{font-size:.62rem;color:var(--dim);flex:1;}
+.pb-speed{font-size:.62rem;color:var(--dim);display:flex;align-items:center;gap:6px;}
+.pb-speed select{background:rgba(0,212,255,.05);border:1px solid var(--border);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:.65rem;padding:3px 6px;border-radius:3px;outline:none;}
+
+/* TIMELINE */
+.timeline-wrap{position:relative;height:48px;background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:3px;overflow:hidden;cursor:pointer;user-select:none;}
+.timeline-track{position:absolute;inset:0;}
+canvas#timelineCanvas{display:block;width:100%;height:100%;}
+.timeline-cursor{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);box-shadow:var(--glow);pointer-events:none;transition:left .05s linear;}
+.timeline-labels{display:flex;justify-content:space-between;margin-top:3px;font-size:.55rem;color:var(--dim);}
+
+/* CALIBRATION OVERLAY */
+#calibOverlay{display:none;position:fixed;inset:0;background:rgba(5,8,16,.9);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:18px;font-family:'Orbitron',monospace;text-align:center;}
+#calibOverlay.active{display:flex;}
+#calibTitle{font-size:1.3rem;color:var(--warn);text-shadow:0 0 16px rgba(255,184,0,.5);letter-spacing:.18em;}
+#calibSub{font-size:.74rem;color:var(--dim);letter-spacing:.08em;}
+#calibProg{width:250px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+#calibBar{height:100%;width:0%;background:var(--warn);border-radius:2px;transition:width .08s linear;}
+
+.note{grid-column:span 4;font-size:.58rem;color:var(--dim);text-align:center;padding:4px;border-top:1px solid var(--border);}
+
+@media(max-width:900px){
+  main{grid-template-columns:repeat(2,1fr);}
+  .horizon-panel,.alt-panel,.connect-panel,.log-panel{grid-column:span 2;}
+  .note{grid-column:span 2;}
+  #rocket3d-container{width:160px;height:160px;bottom:160px;}
+}
+</style>
+</head>
+<body>
+
+<!-- NO SIGNAL FULL-SCREEN ALERT -->
+<div id="noSignalOverlay">
+  <div class="nosig-bars">
+    <div class="nosig-bar"></div><div class="nosig-bar"></div><div class="nosig-bar"></div>
+    <div class="nosig-bar"></div><div class="nosig-bar"></div>
+  </div>
+  <div class="nosig-icon">📡</div>
+  <div class="nosig-title">⚠ SIGNAL LOST</div>
+  <div class="nosig-sub">TELEMETRY LINK FAILURE — NO DATA RECEIVED</div>
+  <div class="nosig-timer" id="noSigTimer">LOST FOR 0s</div>
+  <div class="nosig-detail">ESP-NOW LINK DOWN · CHECK ANTENNA &amp; RANGE · VERIFY TRANSMITTER POWER</div>
+  <button class="nosig-dismiss" onclick="dismissNoSignal()">ACKNOWLEDGE</button>
+</div>
+
+<!-- CALIBRATION OVERLAY -->
+<div id="calibOverlay">
+  <div id="calibTitle">⚙ CALIBRATING</div>
+  <div id="calibSub">Keep rocket completely still — measuring gravity baseline...</div>
+  <div id="calibProg"><div id="calibBar"></div></div>
+  <div style="font-size:.68rem;color:var(--dim);font-family:'Share Tech Mono',monospace" id="calibCount">0 / 100 samples</div>
+</div>
+
+<!-- 3D ROCKET VIEWER -->
+<div id="rocket3d-container" onclick="rocket3dClick(event)">
+  <div id="rocket3d-header">
+    <span>3D ATTITUDE</span>
+    <button id="rocket3d-close" onclick="event.stopPropagation();rocket3dClose()">✕ CLOSE</button>
+  </div>
+  <div id="rocket3d-hint">CLICK TO<br>EXPAND</div>
+  <!-- angles shown in corner mode -->
+  <div id="rocket3d-angles">
+    R:<span id="r3Roll">0.0°</span> P:<span id="r3Pitch">0.0°</span> Y:<span id="r3Yaw">0.0°</span>
+  </div>
+  <!-- fullscreen bottom controls -->
+  <div id="rocket3d-controls">
+    <div class="mode-tabs">
+      <button class="mode-tab active" id="tabViewer"  onclick="event.stopPropagation();setRocketMode('viewer')">🔭 VIEWER</button>
+      <button class="mode-tab"        id="tabSimulate" onclick="event.stopPropagation();setRocketMode('simulate')">🚀 SIMULATE</button>
+    </div>
+    <div class="sim-stats" id="simStats">
+      <span>ROLL <span class="sim-stat-val" id="fsRoll">0.0°</span></span>
+      <span>PITCH <span class="sim-stat-val" id="fsPitch">0.0°</span></span>
+      <span>YAW <span class="sim-stat-val" id="fsYaw">0.0°</span></span>
+      <span>G-FORCE <span class="sim-stat-val" id="fsG">0.00g</span></span>
+      <span>ALT <span class="sim-stat-val" id="fsAlt">0.0m</span></span>
+      <span>VEL <span class="sim-stat-val" id="fsVel">0.0m/s</span></span>
+    </div>
+    <div id="sim-trail-info" style="display:none">
+      Simulating flight path · Tap VIEWER to return to live attitude
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">🚀 ROCKET CONTROL HUB <span style="font-size:.5rem;font-weight:400;color:var(--dim);margin-left:6px">v4</span></div>
+  <div class="header-right">
+    <div class="rec-indicator" id="recIndicator"><div class="rec-dot"></div>REC</div>
+    <div class="sig-badge" id="sigBadge"><div class="sig-dot"></div><span id="sigText">NO LINK</span></div>
+    <span style="font-size:.68rem;color:var(--dim)">ESP-NOW</span>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+</header>
+
+<!-- STATUS -->
+<div class="status-banner waiting" id="statusBanner">
+  <div class="status-center"><div class="status-dot"></div><span id="statusText">WAITING FOR CONNECTION</span></div>
+  <div class="status-right">ACC · GYRO · ALT-EST · 3D</div>
+</div>
+
+<!-- MAIN GRID -->
+<main>
+
+  <!-- G-FORCE -->
+  <div class="panel p-warn">
+    <div class="panel-label">Net G-Force <small>(gravity removed)</small></div>
+    <div class="big-value c-green" id="gValue">0.00 <span class="unit">g</span></div>
+    <div class="sub" id="gRawSub">Raw: 1.000g · Base: 1.000g</div>
+    <div class="gauge-wrap" id="gBars"></div>
+  </div>
+
+  <!-- ORIENTATION -->
+  <div class="panel">
+    <div class="panel-label">Orientation</div>
+    <div class="angle-grid">
+      <div><div class="angle-name">ROLL</div><div class="angle-value" id="rollVal">0.0°</div></div>
+      <div><div class="angle-name">PITCH</div><div class="angle-value" id="pitchVal">0.0°</div></div>
+    </div>
+    <div class="sub" id="tiltSub" style="margin-top:7px">Tilt from vertical: 0.0°</div>
+  </div>
+
+  <!-- AHI (spans 2 rows) -->
+  <div class="panel horizon-panel">
+    <div class="panel-label">Attitude Indicator</div>
+    <div class="horizon-wrap">
+      <svg class="ahi-svg" viewBox="0 0 200 200">
+        <defs><clipPath id="cc"><circle cx="100" cy="100" r="88"/></clipPath></defs>
+        <g clip-path="url(#cc)" id="ahiWorld">
+          <rect x="-50" y="-50" width="300" height="150" fill="#0a2a6e"/>
+          <rect x="-50" y="100" width="300" height="150" fill="#4a2c0a"/>
+          <line x1="-50" y1="100" x2="250" y2="100" stroke="#e8c97a" stroke-width="2"/>
+          <line x1="60" y1="83" x2="140" y2="83" stroke="white" stroke-width="1" opacity=".35"/>
+          <line x1="60" y1="117" x2="140" y2="117" stroke="white" stroke-width="1" opacity=".35"/>
+          <line x1="72" y1="66" x2="128" y2="66" stroke="white" stroke-width="1" opacity=".2"/>
+          <line x1="72" y1="134" x2="128" y2="134" stroke="white" stroke-width="1" opacity=".2"/>
+        </g>
+        <circle cx="100" cy="100" r="88" fill="none" stroke="#1a2744" stroke-width="3"/>
+        <line x1="28" y1="100" x2="74" y2="100" stroke="#00d4ff" stroke-width="2.5"/>
+        <line x1="126" y1="100" x2="172" y2="100" stroke="#00d4ff" stroke-width="2.5"/>
+        <polygon points="100,95 88,110 112,110" fill="#00d4ff"/>
+        <line x1="100" y1="13" x2="100" y2="23" stroke="#3a5080" stroke-width="2" transform="rotate(-30 100 100)"/>
+        <line x1="100" y1="13" x2="100" y2="23" stroke="#3a5080" stroke-width="2" transform="rotate(0 100 100)"/>
+        <line x1="100" y1="13" x2="100" y2="23" stroke="#3a5080" stroke-width="2" transform="rotate(30 100 100)"/>
+        <line x1="100" y1="13" x2="100" y2="20" stroke="#3a5080" stroke-width="1.5" transform="rotate(-60 100 100)"/>
+        <line x1="100" y1="13" x2="100" y2="20" stroke="#3a5080" stroke-width="1.5" transform="rotate(60 100 100)"/>
+        <polygon id="rollPtr" points="100,24 95,35 105,35" fill="#00d4ff" style="transform-origin:100px 100px"/>
+      </svg>
+    </div>
+    <div style="text-align:center;font-size:.6rem;color:var(--dim);padding-bottom:4px">
+      R <span id="ahiRoll" style="color:var(--accent)">0.0°</span> &nbsp;|&nbsp; P <span id="ahiPitch" style="color:var(--accent)">0.0°</span>
+    </div>
+  </div>
+
+  <!-- ALTITUDE -->
+  <div class="panel p-purple">
+    <div class="panel-label">Altitude Estimate <small>(acc double-int)</small></div>
+    <div class="big-value c-purple" id="altVal">0.0 <span class="unit">m</span></div>
+    <div class="sub" id="altSub">Vel: 0.00 m/s · Peak: 0.0 m</div>
+  </div>
+
+  <!-- ALT CHART -->
+  <div class="panel alt-panel p-purple">
+    <div class="panel-label">Altitude History</div>
+    <div class="chart-wrap"><canvas id="altChart"></canvas></div>
+  </div>
+
+  <!-- RAW AXES -->
+  <div class="panel p-green">
+    <div class="panel-label">Accelerometer + Gyro</div>
+    <div class="vector-row">
+      <div class="axis-item"><div class="axis-name">AX</div><div class="axis-bar-wrap"><div class="axis-bar-fill" id="axBar" style="background:var(--accent2);width:50%"></div></div><div class="axis-val" id="axVal">0.000g</div></div>
+      <div class="axis-item"><div class="axis-name">AY</div><div class="axis-bar-wrap"><div class="axis-bar-fill" id="ayBar" style="background:var(--green);width:50%"></div></div><div class="axis-val" id="ayVal">0.000g</div></div>
+      <div class="axis-item"><div class="axis-name">AZ</div><div class="axis-bar-wrap"><div class="axis-bar-fill" id="azBar" style="background:var(--accent);width:50%"></div></div><div class="axis-val" id="azVal">1.000g</div></div>
+    </div>
+    <div class="gyro-row">
+      <div class="gyro-item"><div class="gyro-name">GX °/s</div><div class="gyro-val" id="gxVal">0.0</div></div>
+      <div class="gyro-item"><div class="gyro-name">GY °/s</div><div class="gyro-val" id="gyVal">0.0</div></div>
+      <div class="gyro-item"><div class="gyro-name">GZ °/s</div><div class="gyro-val" id="gzVal">0.0</div></div>
+    </div>
+    <div class="sub" style="margin-top:6px">Session peak: <span class="c-warn" id="maxGEl">0.000g</span></div>
+  </div>
+
+  <!-- DERIVED STATS -->
+  <div class="panel">
+    <div class="panel-label">Derived Stats</div>
+    <div class="stat-grid">
+      <div><div class="stat-name">FLIGHT TIME</div><div class="stat-val c-cyan" id="flightTime">00:00.0</div></div>
+      <div><div class="stat-name">PEAK VEL</div><div class="stat-val c-warn" id="peakVelEl">0.00 m/s</div></div>
+      <div><div class="stat-name">IMPULSE ∫g·dt</div><div class="stat-val c-green" id="impulseEl">0.00 g·s</div></div>
+      <div><div class="stat-name">SPIN RATE</div><div class="stat-val c-purple" id="spinRateEl">0.0 °/s</div></div>
+      <div><div class="stat-name">JERK Δg/s</div><div class="stat-val c-red" id="jerkEl">0.000</div></div>
+      <div><div class="stat-name">STABILITY</div><div class="stat-val c-dim" id="stabilityEl">--</div></div>
+    </div>
+  </div>
+
+  <!-- TELEMETRY -->
+  <div class="panel">
+    <div class="panel-label">Telemetry</div>
+    <div class="packets-row"><div class="pkt-count" id="pktCount">0</div><div class="pkt-rate" id="pktRate">-- /s</div></div>
+    <div class="sub" id="errSub" style="margin-top:4px">Link: waiting</div>
+    <div class="sub" id="linkSub" style="margin-top:2px">Last pkt: --</div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="panel connect-panel">
+    <div class="panel-label">Connection &amp; Controls</div>
+    <div class="ctrl-row">
+      <input class="port-input" id="baudInput" value="115200" placeholder="baud">
+      <button class="btn" id="connectBtn" onclick="toggleConnect()">CONNECT</button>
+      <button class="btn bwarn" id="calibBtn" onclick="startCalib()" disabled>⊙ CALIBRATE</button>
+      <button class="btn bgreen" id="recBtn" onclick="toggleRec()" disabled>⏺ RECORD</button>
+      <button class="btn bpurple" onclick="resetAll()">⟳ RESET</button>
+      <div class="conn-status"><div class="conn-dot" id="connDot"></div><span id="connLabel">OFFLINE</span></div>
+    </div>
+    <div class="sub" style="margin-top:6px">Chrome/Edge · Web Serial · <strong style="color:var(--warn)">CALIBRATE stationary before launch</strong></div>
+  </div>
+
+  <!-- LOG -->
+  <div class="panel log-panel">
+    <div class="panel-label">System Log</div>
+    <div class="log-box" id="logBox"></div>
+  </div>
+
+  <div class="note">⚠ Altitude via acc double-integration — drift accumulates. Most accurate first ~30 s. · RECORD saves acc+gyro CSV. · Load CSV to replay with 3D visualisation.</div>
+
+</main>
+
+<!-- ═══════════════ PLAYBACK BAR ═══════════════ -->
+<div id="playback-panel">
+  <div class="pb-top">
+    <div class="pb-title">⏵ FLIGHT PLAYBACK</div>
+    <div class="pb-info" id="pbInfo">Load a recorded CSV to replay flight data</div>
+    <label class="btn bpurple" style="cursor:pointer;font-size:.58rem">
+      📂 LOAD CSV <input type="file" id="csvFileIn" accept=".csv" style="display:none" onchange="loadCSV(this)">
+    </label>
+    <button class="btn" id="pbPlayBtn" onclick="pbTogglePlay()" disabled>▶ PLAY</button>
+    <button class="btn" id="pbStopBtn" onclick="pbStop()" disabled>⏹</button>
+    <div class="pb-speed">
+      SPEED <select id="pbSpeed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select>
+    </div>
+    <div style="font-size:.6rem;color:var(--dim)" id="pbTimecode">--:--.- / --:--.--</div>
+  </div>
+  <div class="timeline-wrap" id="timelineWrap" onmousedown="pbSeekStart(event)" ontouchstart="pbSeekStart(event)">
+    <div class="timeline-track"><canvas id="timelineCanvas"></canvas></div>
+    <div class="timeline-cursor" id="timelineCursor" style="left:0%"></div>
+  </div>
+  <div class="timeline-labels" id="timelineLabels"><span>0s</span><span></span><span></span><span></span><span></span></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  CLOCK
+// ══════════════════════════════════════════
+function tick(){document.getElementById('clock').textContent=new Date().toTimeString().slice(0,8);}
+setInterval(tick,1000);tick();
+
+// ══════════════════════════════════════════
+//  THREE.JS 3D ROCKET
+// ══════════════════════════════════════════
+(function initThree(){
+  const container=document.getElementById('rocket3d-container');
+
+  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(container.clientWidth,container.clientHeight);
+  renderer.setClearColor(0x000000,0);
+  // insert before the angles bar
+  container.insertBefore(renderer.domElement, document.getElementById('rocket3d-angles'));
+
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(42,1,0.1,200);
+  camera.position.set(0,0,6);
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0x223355,2.2));
+  const dl=new THREE.DirectionalLight(0x00d4ff,2.0); dl.position.set(3,5,5); scene.add(dl);
+  const dl2=new THREE.DirectionalLight(0xff4d00,.6); dl2.position.set(-3,-3,2); scene.add(dl2);
+
+  // ── Materials ──
+  const bodyMat  =new THREE.MeshPhongMaterial({color:0xd0e8ff,shininess:90,specular:0x336688});
+  const noseMat  =new THREE.MeshPhongMaterial({color:0xff4d00,shininess:130,specular:0xff8844});
+  const finMat   =new THREE.MeshPhongMaterial({color:0x00d4ff,shininess:70,specular:0x004466,side:THREE.DoubleSide});
+  const nozzleMat=new THREE.MeshPhongMaterial({color:0x445566,shininess:220,specular:0x889900});
+  const glowMat  =new THREE.MeshBasicMaterial({color:0xff6600,transparent:true,opacity:0});
+
+  const rocketGroup=new THREE.Group();
+  scene.add(rocketGroup);
+
+  // Body
+  rocketGroup.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(.25,.25,2,28),bodyMat)));
+  // Nose cone
+  const nose=new THREE.Mesh(new THREE.ConeGeometry(.25,.9,28),noseMat);
+  nose.position.y=1.45; rocketGroup.add(nose);
+  // Shoulder ring
+  const sh=new THREE.Mesh(new THREE.CylinderGeometry(.262,.25,.1,28),bodyMat);
+  sh.position.y=1.0; rocketGroup.add(sh);
+  // Nozzle
+  const nozzle=new THREE.Mesh(new THREE.CylinderGeometry(.11,.19,.32,18),nozzleMat);
+  nozzle.position.y=-1.16; rocketGroup.add(nozzle);
+  // Glow exhaust
+  const glow=new THREE.Mesh(new THREE.ConeGeometry(.12,.6,14),glowMat);
+  glow.rotation.x=Math.PI; glow.position.y=-1.47; rocketGroup.add(glow);
+  window._rocketGlow=glow;
+
+  // 4 fins
+  for(let i=0;i<4;i++){
+    const a=i*Math.PI/2;
+    const fin=new THREE.Mesh(new THREE.BoxGeometry(.04,.68,.52),finMat);
+    fin.position.set(Math.sin(a)*.28,-.84,Math.cos(a)*.28);
+    fin.rotation.y=a; rocketGroup.add(fin);
+  }
+  // Detail stripes
+  for(const y of [.5,-.3]){
+    const s=new THREE.Mesh(new THREE.CylinderGeometry(.253,.253,.055,28),
+      new THREE.MeshPhongMaterial({color:0xff4d00,shininess:40}));
+    s.position.y=y; rocketGroup.add(s);
+  }
+
+  // Wireframe reference sphere
+  scene.add(new THREE.Mesh(
+    new THREE.SphereGeometry(1.6,8,6),
+    new THREE.MeshBasicMaterial({color:0x1a2744,wireframe:true,transparent:true,opacity:.2})
+  ));
+
+  // ── Flight-sim trail line ──
+  const TRAIL_MAX=200;
+  const trailPositions=new Float32Array(TRAIL_MAX*3);
+  const trailGeo=new THREE.BufferGeometry();
+  trailGeo.setAttribute('position',new THREE.BufferAttribute(trailPositions,3));
+  trailGeo.setDrawRange(0,0);
+  const trailLine=new THREE.Line(trailGeo,
+    new THREE.LineBasicMaterial({color:0x00d4ff,transparent:true,opacity:.5}));
+  scene.add(trailLine);
+  window._trailGeo=trailGeo;
+  window._trailPositions=trailPositions;
+  window._trailCount=0;
+
+  // ── Ground plane (sim mode) ──
+  const groundGeo=new THREE.PlaneGeometry(60,60,20,20);
+  const groundMat=new THREE.MeshBasicMaterial({color:0x0a1520,wireframe:true,transparent:true,opacity:.3});
+  const ground=new THREE.Mesh(groundGeo,groundMat);
+  ground.rotation.x=-Math.PI/2; ground.position.y=-8; ground.visible=false;
+  scene.add(ground); window._ground=ground;
+
+  window._rocketGroup=rocketGroup;
+  window._rocketRenderer=renderer;
+  window._rocketScene=scene;
+  window._rocketCamera=camera;
+
+  // ── Current quaternion for slerp ──
+  window._rocketQuat=new THREE.Quaternion();   // current displayed quat
+  window._targetQuat=new THREE.Quaternion();   // target quat to slerp toward
+
+  // ── Sim state ──
+  window._simPos=new THREE.Vector3(0,0,0);
+  window._simVel=new THREE.Vector3(0,0,0);
+  window._simT=0;
+
+  let glowT=0;
+  function animate(){
+    requestAnimationFrame(animate);
+    glowT+=0.05;
+
+    // Slerp current displayed quat toward target — shortest path always
+    window._rocketQuat.slerp(window._targetQuat, 0.18);
+    rocketGroup.setRotationFromQuaternion(window._rocketQuat);
+
+    if(window._rocketGlow){
+      window._rocketGlow.scale.y=.7+Math.sin(glowT)*.3;
+      window._rocketGlow.material.opacity=window._isThrusting?(.65+Math.sin(glowT*2)*.3):0;
+    }
+
+    // Sim mode: move rocket along flight path
+    if(window._rocketMode==='simulate'&&window._isFullscreen){
+      const dt=0.016;
+      window._simT+=dt;
+      // Thrust phase: accelerate upward along rocket's local Y
+      if(window._isThrusting){
+        const thrust=new THREE.Vector3(0,0.08,0).applyQuaternion(window._rocketQuat);
+        window._simVel.add(thrust);
+      }
+      // Gravity
+      window._simVel.y-=0.012;
+      // Drag
+      window._simVel.multiplyScalar(0.99);
+      window._simPos.add(window._simVel.clone().multiplyScalar(dt*8));
+      // Ground clamp
+      if(window._simPos.y<-7){window._simPos.y=-7;window._simVel.multiplyScalar(0);}
+      rocketGroup.position.copy(window._simPos);
+      // Camera follows rocket
+      camera.position.set(
+        window._simPos.x+0,
+        window._simPos.y+2,
+        window._simPos.z+8
+      );
+      camera.lookAt(window._simPos);
+      // Trail
+      const tc=window._trailCount;
+      if(tc<TRAIL_MAX){
+        trailPositions[tc*3  ]=window._simPos.x;
+        trailPositions[tc*3+1]=window._simPos.y;
+        trailPositions[tc*3+2]=window._simPos.z;
+        window._trailCount++;
+        trailGeo.setDrawRange(0,window._trailCount);
+        trailGeo.attributes.position.needsUpdate=true;
+      }
+    } else {
+      // Viewer mode: camera orbits gently, rocket stays centred
+      rocketGroup.position.set(0,0,0);
+      camera.position.set(0,0,6);
+      camera.lookAt(0,0,0);
+    }
+
+    renderer.render(scene,camera);
+  }
+  animate();
+
+  // Resize handler
+  const ro=new ResizeObserver(()=>{
+    const w=container.clientWidth,h=container.clientHeight;
+    camera.aspect=w/h; camera.updateProjectionMatrix();
+    renderer.setSize(w,h);
+  });
+  ro.observe(container);
+})();
+
+// ── Mode + fullscreen state ──
+window._rocketMode='viewer';    // 'viewer' | 'simulate'
+window._isFullscreen=false;
+window._isThrusting=false;
+
+function rocket3dClick(e){
+  if(window._isFullscreen)return;  // ignore clicks when fullscreen (handled by close btn)
+  rocket3dOpen();
+}
+function rocket3dOpen(){
+  const c=document.getElementById('rocket3d-container');
+  c.classList.add('fullscreen');
+  window._isFullscreen=true;
+  // reset sim pos
+  if(window._simPos){window._simPos.set(0,-7,0);window._simVel.set(0,0,0);window._trailCount=0;
+    if(window._trailGeo)window._trailGeo.setDrawRange(0,0);}
+  if(window._ground)window._ground.visible=(window._rocketMode==='simulate');
+}
+function rocket3dClose(){
+  const c=document.getElementById('rocket3d-container');
+  c.classList.remove('fullscreen');
+  window._isFullscreen=false;
+  if(window._ground)window._ground.visible=false;
+}
+function setRocketMode(mode){
+  window._rocketMode=mode;
+  document.getElementById('tabViewer').classList.toggle('active',mode==='viewer');
+  document.getElementById('tabSimulate').classList.toggle('active',mode==='simulate');
+  document.getElementById('sim-trail-info').style.display=mode==='simulate'?'block':'none';
+  if(window._ground)window._ground.visible=(mode==='simulate');
+  if(mode==='simulate'&&window._simPos){
+    window._simPos.set(0,-7,0);window._simVel.set(0,0,0);
+    window._trailCount=0;
+    if(window._trailGeo)window._trailGeo.setDrawRange(0,0);
+  }
+}
+
+// ── Convert Euler → Quaternion using shortest path (slerp) ──
+const DEG=Math.PI/180;
+const _tmpEuler=new THREE.Euler();
+const _tmpQuat =new THREE.Quaternion();
+
+function update3D(rollDeg,pitchDeg,yawDeg){
+  if(!window._rocketGroup||!window._targetQuat) return;
+
+  // Build target quaternion from Euler angles
+  _tmpEuler.set(pitchDeg*DEG, yawDeg*DEG, -rollDeg*DEG, 'YXZ');
+  _tmpQuat.setFromEuler(_tmpEuler);
+
+  // Ensure slerp takes the SHORT way around:
+  // if dot product is negative, negate the target quaternion
+  // so both quats are in the same hemisphere
+  if(window._rocketQuat.dot(_tmpQuat)<0){
+    _tmpQuat.set(-_tmpQuat.x,-_tmpQuat.y,-_tmpQuat.z,-_tmpQuat.w);
+  }
+  window._targetQuat.copy(_tmpQuat);
+
+  // Update readouts
+  document.getElementById('r3Roll').textContent  = rollDeg.toFixed(1)+'°';
+  document.getElementById('r3Pitch').textContent = pitchDeg.toFixed(1)+'°';
+  document.getElementById('r3Yaw').textContent   = yawDeg.toFixed(1)+'°';
+
+  // Fullscreen stat bar
+  if(window._isFullscreen){
+    document.getElementById('fsRoll').textContent  = rollDeg.toFixed(1)+'°';
+    document.getElementById('fsPitch').textContent = pitchDeg.toFixed(1)+'°';
+    document.getElementById('fsYaw').textContent   = yawDeg.toFixed(1)+'°';
+    document.getElementById('fsG').textContent     = (typeof g_f!=='undefined'?(g_f-gravBase).toFixed(2):'--.--')+'g';
+    document.getElementById('fsAlt').textContent   = (typeof alt!=='undefined'?alt.toFixed(1):'--.--')+'m';
+    document.getElementById('fsVel').textContent   = (typeof vel!=='undefined'?vel.toFixed(2):'--.--')+'m/s';
+  }
+}
+
+// ══════════════════════════════════════════
+//  G BARS
+// ══════════════════════════════════════════
+const gBarsEl=document.getElementById('gBars');
+const BAR_N=20;
+for(let i=0;i<BAR_N;i++){const b=document.createElement('div');b.className='bar';gBarsEl.appendChild(b);}
+function updateBars(g){
+  const bars=gBarsEl.children,frac=Math.min(Math.abs(g)/4,1),fill=Math.round(frac*BAR_N);
+  for(let i=0;i<BAR_N;i++){
+    const on=i<fill,r=i/BAR_N;
+    bars[i].style.background=on?(r<.5?'#00ff88':r<.75?'#ffb800':'#ff4d00'):'var(--border)';
+    bars[i].style.height=on?`${6+(i/BAR_N)*17}px`:'4px';
+  }
+}
+
+// ══════════════════════════════════════════
+//  ALTITUDE CHART
+// ══════════════════════════════════════════
+const altCanvas=document.getElementById('altChart');
+const actx=altCanvas.getContext('2d');
+const ALT_N=150;
+let altHistory=new Array(ALT_N).fill(0);
+function resizeAlt(){altCanvas.width=altCanvas.offsetWidth*devicePixelRatio;altCanvas.height=altCanvas.offsetHeight*devicePixelRatio;}
+resizeAlt();window.addEventListener('resize',resizeAlt);
+function drawAlt(){
+  resizeAlt();
+  const w=altCanvas.width,h=altCanvas.height;
+  actx.clearRect(0,0,w,h);
+  const maxA=Math.max(...altHistory,1),minA=Math.min(...altHistory,0),rng=maxA-minA||1;
+  actx.strokeStyle='rgba(26,39,68,.7)';actx.lineWidth=1;
+  for(let i=0;i<=4;i++){const y=(i/4)*h;actx.beginPath();actx.moveTo(0,y);actx.lineTo(w,y);actx.stroke();}
+  const grad=actx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0,'rgba(176,106,255,.28)');grad.addColorStop(1,'rgba(176,106,255,0)');
+  actx.beginPath();
+  altHistory.forEach((v,i)=>{const x=(i/(ALT_N-1))*w,y=h-((v-minA)/rng)*h*.88-h*.06;i===0?actx.moveTo(x,y):actx.lineTo(x,y);});
+  actx.lineTo(w,h);actx.lineTo(0,h);actx.closePath();actx.fillStyle=grad;actx.fill();
+  actx.beginPath();
+  altHistory.forEach((v,i)=>{const x=(i/(ALT_N-1))*w,y=h-((v-minA)/rng)*h*.88-h*.06;i===0?actx.moveTo(x,y):actx.lineTo(x,y);});
+  actx.strokeStyle='#b06aff';actx.lineWidth=2*devicePixelRatio;actx.stroke();
+  actx.fillStyle='rgba(176,106,255,.75)';actx.font=`${10*devicePixelRatio}px Share Tech Mono`;actx.textAlign='right';
+  actx.fillText(`PEAK ${maxA.toFixed(1)}m`,w-4,13*devicePixelRatio);
+}
+setInterval(drawAlt,100);
+
+// ══════════════════════════════════════════
+//  AHI
+// ══════════════════════════════════════════
+function updateAHI(roll,pitch){
+  const world=document.getElementById('ahiWorld'),ptr=document.getElementById('rollPtr');
+  const py=Math.max(-65,Math.min(65,pitch*1.1));
+  world.setAttribute('transform',`rotate(${roll},100,100) translate(0,${py})`);
+  ptr.setAttribute('transform',`rotate(${roll},100,100)`);
+  document.getElementById('ahiRoll').textContent=roll.toFixed(1)+'°';
+  document.getElementById('ahiPitch').textContent=pitch.toFixed(1)+'°';
+}
+
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+const ALPHA=0.15;
+// No pre-smoothing on gyro — the MPU6050 DLPF handles that on-chip.
+// Pre-smoothing in JS was the main cause of 2-3s lag.
+let roll_f=0,pitch_f=0,g_f=1.0,yaw_f=0;
+let gravBase=1.0,calibrated=false,calibBuf=[];
+const CALIB_N=100;
+let vel=0,alt=0,peakAlt=0,peakVel=0,lastT=null;
+let flightActive=false,flightStart=null,impulse=0;
+let prevNetG=0,jerk=0,prevRoll=0,spinRate=0;
+// gyro state
+let gx_f=0,gy_f=0,gz_f=0;
+let gyroRoll=0,gyroPitch=0,gyroYaw=0;  // gyro-integrated angles
+// signal state
+let linkStatus='none'; // 'ok','weak','lost','nosignal'
+let noSignalActive=false;
+let noSignalSince=null;
+let noSignalDismissed=false;
+let lastPktTime=null;
+// session
+let packets=0,errors=0,lastPkts=0,pktTs=Date.now();
+let recording=false,recRows=[],recStart=null;
+let connected=false,port=null,reader=null,buf='';
+
+// ── STATUS ──
+function setStatus(cls,text){
+  document.getElementById('statusBanner').className='status-banner '+cls;
+  document.getElementById('statusText').textContent=text;
+}
+
+// ── LOG ──
+const logBox=document.getElementById('logBox');
+function log(msg,type=''){
+  const el=document.createElement('div');
+  el.className='log-entry fresh'+(type?' '+type:'');
+  el.textContent=`[${new Date().toTimeString().slice(0,8)}] ${msg}`;
+  logBox.appendChild(el);
+  if(logBox.children.length>80)logBox.removeChild(logBox.firstChild);
+  logBox.scrollTop=logBox.scrollHeight;
+  setTimeout(()=>el.classList.remove('fresh'),900);
+}
+
+// ══════════════════════════════════════════
+//  SIGNAL STATUS
+// ══════════════════════════════════════════
+let maxG=0; // session peak
+
+function setSignal(status){
+  // status: 'ok' | 'weak' | 'lost' | 'nosignal'
+  const badge=document.getElementById('sigBadge');
+  const text=document.getElementById('sigText');
+  linkStatus=status;
+  badge.className='sig-badge';
+  if(status==='ok')  {badge.classList.add('ok');  text.textContent='LINK OK';}
+  else if(status==='weak'){badge.classList.add('weak');text.textContent='LINK WEAK';}
+  else if(status==='lost'){badge.classList.add('lost');text.textContent='LINK LOST';}
+  else               {text.textContent='NO LINK';}
+  document.getElementById('errSub').textContent='Link: '+(status==='ok'?'OK':status==='weak'?'WEAK':status==='lost'?'LOST':'NO SIGNAL');
+}
+
+function triggerNoSignal(){
+  if(noSignalActive||noSignalDismissed)return;
+  noSignalActive=true;
+  noSignalSince=Date.now();
+  document.getElementById('noSignalOverlay').classList.add('active');
+  setSignal('nosignal');
+  log('⚠ LINK:NO SIGNAL — telemetry lost!','le');
+  if(recording){ log('⚠ Recording paused — no data','le'); }
+}
+
+function dismissNoSignal(){
+  document.getElementById('noSignalOverlay').classList.remove('active');
+  noSignalActive=false;
+  noSignalDismissed=true;
+  // auto re-arm after 5s so next loss still shows
+  setTimeout(()=>{ noSignalDismissed=false; },5000);
+  log('Signal alert acknowledged');
+}
+
+// Update no-signal timer text
+setInterval(()=>{
+  if(noSignalActive&&noSignalSince){
+    const s=Math.floor((Date.now()-noSignalSince)/1000);
+    document.getElementById('noSigTimer').textContent=`LOST FOR ${s}s`;
+  }
+  if(lastPktTime&&connected){
+    const ago=((Date.now()-lastPktTime)/1000).toFixed(1);
+    document.getElementById('linkSub').textContent=`Last pkt: ${ago}s ago`;
+  }
+},500);
+
+// ══════════════════════════════════════════
+//  CALIBRATION
+// ══════════════════════════════════════════
+function startCalib(){
+  if(!connected)return;
+  calibBuf=[];
+  document.getElementById('calibOverlay').classList.add('active');
+  document.getElementById('calibBar').style.width='0%';
+  document.getElementById('calibCount').textContent='0 / '+CALIB_N+' samples';
+  log('Calibration started — hold rocket still','lw');
+  setStatus('calibrating','CALIBRATING — HOLD STILL');
+}
+function feedCalib(g_raw){
+  if(calibBuf.length>=CALIB_N)return;
+  calibBuf.push(g_raw);
+  document.getElementById('calibBar').style.width=(calibBuf.length/CALIB_N*100).toFixed(0)+'%';
+  document.getElementById('calibCount').textContent=calibBuf.length+' / '+CALIB_N+' samples';
+  if(calibBuf.length===CALIB_N)finishCalib();
+}
+function finishCalib(){
+  gravBase=calibBuf.reduce((a,b)=>a+b,0)/calibBuf.length;
+  calibrated=true;
+  document.getElementById('calibOverlay').classList.remove('active');
+  log(`✓ Calibrated. Baseline = ${gravBase.toFixed(5)}g`,'lw');
+  setStatus('idle','IDLE — AWAITING LAUNCH');
+  vel=0;alt=0;peakAlt=0;peakVel=0;lastT=null;
+}
+
+// ══════════════════════════════════════════
+//  RESET
+// ══════════════════════════════════════════
+function resetAll(){
+  if(recording)toggleRec();
+  roll_f=0;pitch_f=0;g_f=1;yaw_f=0;
+  gx_f=0;gy_f=0;gz_f=0;gyroRoll=0;gyroPitch=0;gyroYaw=0;
+  vel=0;alt=0;peakAlt=0;peakVel=0;lastT=null;
+  flightActive=false;flightStart=null;impulse=0;
+  prevNetG=0;jerk=0;prevRoll=0;spinRate=0;maxG=0;
+  packets=0;errors=0;lastPkts=0;pktTs=Date.now();
+  altHistory=new Array(ALT_N).fill(0);
+  noSignalActive=false;noSignalDismissed=false;noSignalSince=null;
+  document.getElementById('noSignalOverlay').classList.remove('active');
+  pbStop();
+  ['gValue','gRawSub','rollVal','pitchVal','tiltSub','altVal','altSub','axVal','ayVal','azVal','maxGEl','flightTime','peakVelEl','impulseEl','spinRateEl','jerkEl','stabilityEl','pktCount','pktRate','errSub'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.textContent=id==='gValue'?'0.00':id==='pktRate'?'-- /s':id==='errSub'?'Errors: 0':id==='stabilityEl'?'--':'0';
+  });
+  document.getElementById('gValue').innerHTML='0.00 <span class="unit">g</span>';
+  document.getElementById('gValue').className='big-value c-green';
+  document.getElementById('gRawSub').textContent=`Raw: 1.000g · Base: ${gravBase.toFixed(3)}g`;
+  ['axBar','ayBar','azBar'].forEach(id=>document.getElementById(id).style.width='50%');
+  ['gxVal','gyVal','gzVal'].forEach(id=>document.getElementById(id).textContent='0.0');
+  document.getElementById('errSub').textContent='Link: waiting';
+  document.getElementById('linkSub').textContent='Last pkt: --';
+  updateBars(0);updateAHI(0,0);update3D(0,0,0);
+  window._isThrusting=false;
+  setSignal('none');
+  setStatus(connected?'idle':'waiting',connected?'IDLE — AWAITING LAUNCH':'WAITING FOR CONNECTION');
+  log('⟳ Session reset');
+}
+
+// ══════════════════════════════════════════
+//  RECORDING
+// ══════════════════════════════════════════
+function toggleRec(){
+  if(!recording){
+    recording=true;recRows=[];recStart=Date.now();
+    recRows.push(['time_ms','ax_g','ay_g','az_g','gx_dps','gy_dps','gz_dps','roll_deg','pitch_deg','yaw_deg','net_g','alt_m','vel_ms']);
+    document.getElementById('recBtn').textContent='⏹ STOP';
+    document.getElementById('recBtn').classList.replace('bgreen','danger');
+    document.getElementById('recIndicator').classList.add('active');
+    log('⏺ Recording started','lw');
+  } else {
+    recording=false;
+    document.getElementById('recBtn').textContent='⏺ RECORD';
+    document.getElementById('recBtn').classList.replace('danger','bgreen');
+    document.getElementById('recIndicator').classList.remove('active');
+    saveCSV();
+  }
+}
+function saveCSV(){
+  if(recRows.length<2){log('No data recorded','le');return;}
+  const csv=recRows.map(r=>r.join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const ts=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+  a.href=url;a.download=`rocket_${ts}.csv`;a.click();
+  URL.revokeObjectURL(url);
+  log(`✓ Saved ${recRows.length-1} rows → rocket_${ts}.csv`);
+}
+
+// ══════════════════════════════════════════
+//  PARSE LINE  (new ESP-NOW format)
+//  AX:0.012 AY:-0.003 AZ:1.001 | GX:0.12 GY:-0.08 GZ:0.04 | G:1.002 | ID:1234 | LOSS:0 | LINK:OK
+// ══════════════════════════════════════════
+function parseTelemetry(line){
+  // Handle bare NO SIGNAL line from loop()
+  if(line.trim()==='LINK:NO SIGNAL'||line.includes('LINK:NO SIGNAL')){
+    return {noSignal:true};
+  }
+  const result={};
+  const get=(key)=>{
+    const idx=line.indexOf(key+':');
+    if(idx<0)return NaN;
+    return parseFloat(line.slice(idx+key.length+1));
+  };
+  const getStr=(key)=>{
+    const idx=line.indexOf(key+':');
+    if(idx<0)return null;
+    const rest=line.slice(idx+key.length+1);
+    return rest.split(/[\s|]/)[0].trim();
+  };
+  result.ax=get('AX'); result.ay=get('AY'); result.az=get('AZ');
+  result.gx=get('GX'); result.gy=get('GY'); result.gz=get('GZ');
+  result.gforce=get('G');
+  result.link=getStr('LINK');  // 'OK', 'WEAK', 'LOST'
+  // validate — must have at least acc
+  if(isNaN(result.ax)||isNaN(result.ay)||isNaN(result.az))return null;
+  return result;
+}
+
+// ══════════════════════════════════════════
+//  UPDATE UI FROM SENSOR VALUES
+// ══════════════════════════════════════════
+function applyFrame(ax,ay,az,roll_deg,pitch_deg,netG_override,alt_override,vel_override){
+  // If overrides supplied (playback), use them directly
+  const netG   = netG_override  !== undefined ? netG_override  : (g_f - gravBase);
+  const curAlt = alt_override   !== undefined ? alt_override   : alt;
+  const curVel = vel_override   !== undefined ? vel_override   : vel;
+  const tilt=Math.sqrt(roll_deg*roll_deg+pitch_deg*pitch_deg);
+
+  // Status
+  if(netG>1.5)                             setStatus('launch','⚠ LAUNCH / BOOST');
+  else if(netG>0.3)                        setStatus('flight','POWERED FLIGHT');
+  else if(flightActive&&curAlt>1&&curVel<-.5) setStatus('descent','DESCENT');
+  else if(flightActive)                    setStatus('idle','COAST / LANDED');
+  else                                     setStatus('idle','IDLE — AWAITING LAUNCH');
+
+  window._isThrusting = netG>1.0;
+
+  // G
+  const gEl=document.getElementById('gValue');
+  gEl.innerHTML=`${netG.toFixed(3)} <span class="unit">g</span>`;
+  gEl.className='big-value '+(netG>1.5?'c-red':netG>0.3?'c-warn':'c-green');
+  document.getElementById('gRawSub').textContent=`Raw: ${g_f.toFixed(4)}g · Base: ${gravBase.toFixed(4)}g`;
+  updateBars(netG);
+
+  // Orientation
+  document.getElementById('rollVal').textContent  = roll_deg.toFixed(1)+'°';
+  document.getElementById('pitchVal').textContent = pitch_deg.toFixed(1)+'°';
+  document.getElementById('tiltSub').textContent  = `Tilt from vertical: ${tilt.toFixed(1)}°`;
+  updateAHI(roll_deg,pitch_deg);
+  update3D(roll_deg,pitch_deg,yaw_f);
+
+  // Altitude
+  altHistory.push(curAlt);if(altHistory.length>ALT_N)altHistory.shift();
+  document.getElementById('altVal').innerHTML=`${curAlt.toFixed(2)} <span class="unit">m</span>`;
+  document.getElementById('altSub').textContent=`Vel: ${curVel.toFixed(3)} m/s · Peak: ${peakAlt.toFixed(2)} m`;
+
+  // Axes
+  const aw=v=>Math.min(100,Math.max(0,(v/2*50+50))).toFixed(1)+'%';
+  document.getElementById('axBar').style.width=aw(ax);
+  document.getElementById('ayBar').style.width=aw(ay);
+  document.getElementById('azBar').style.width=aw(az);
+  document.getElementById('axVal').textContent=ax.toFixed(4)+'g';
+  document.getElementById('ayVal').textContent=ay.toFixed(4)+'g';
+  document.getElementById('azVal').textContent=az.toFixed(4)+'g';
+  document.getElementById('maxGEl').textContent=maxG.toFixed(4)+'g';
+
+  // Derived
+  if(flightActive&&flightStart){
+    const e=(Date.now()-flightStart)/1000;
+    const m=Math.floor(e/60),s=(e%60).toFixed(1).padStart(4,'0');
+    document.getElementById('flightTime').textContent=String(m).padStart(2,'0')+':'+s;
+  }
+  document.getElementById('peakVelEl').textContent=peakVel.toFixed(3)+' m/s';
+  document.getElementById('impulseEl').textContent=impulse.toFixed(3)+' g·s';
+  document.getElementById('spinRateEl').textContent=Math.abs(spinRate).toFixed(1)+' °/s';
+  document.getElementById('jerkEl').textContent=jerk.toFixed(3);
+
+  let stability='STABLE';
+  if(tilt>45)stability='TUMBLING';else if(tilt>20)stability='UNSTABLE';else if(tilt>8)stability='MARGINAL';
+  const sEl=document.getElementById('stabilityEl');
+  sEl.textContent=stability;
+  sEl.style.color=stability==='STABLE'?'var(--green)':stability==='TUMBLING'?'var(--accent2)':'var(--warn)';
+
+  document.getElementById('pktCount').textContent=packets;
+  document.getElementById('errSub').textContent='Errors: '+errors;
+}
+
+// ══════════════════════════════════════════
+//  PROCESS LIVE PACKET
+// ══════════════════════════════════════════
+function processLine(line){
+  line=line.trim();
+  if(!line)return;
+
+  // ── LINK:NO SIGNAL (from ESP32 loop()) ──
+  if(line==='LINK:NO SIGNAL'||line.startsWith('LINK:NO SIGNAL')){
+    triggerNoSignal();
+    return;
+  }
+
+  // Must contain AX to be telemetry
+  if(!line.includes('AX:'))return;
+
+  try{
+    const d=parseTelemetry(line);
+    if(!d||d.noSignal){triggerNoSignal();return;}
+
+    // ── Signal status from packet ──
+    if(d.link){
+      if(d.link==='OK')       setSignal('ok');
+      else if(d.link==='WEAK')setSignal('weak');
+      else if(d.link==='LOST'){setSignal('lost'); triggerNoSignal(); return;}
+    }
+    // If we got a valid packet, we clearly have signal — clear overlay
+    if(noSignalActive){
+      document.getElementById('noSignalOverlay').classList.remove('active');
+      noSignalActive=false;
+      log('✓ Signal restored','lw');
+    }
+    lastPktTime=Date.now();
+
+    const ax=d.ax, ay=d.ay, az=d.az;
+    const gx=isNaN(d.gx)?0:d.gx;  // deg/s from MPU6050
+    const gy=isNaN(d.gy)?0:d.gy;
+    const gz=isNaN(d.gz)?0:d.gz;
+
+    const now=Date.now();
+    const dt=lastT?Math.min((now-lastT)/1000,.1):.02;
+    lastT=now;
+
+    // ── Accel-derived angles ──
+    const accRoll  = Math.atan2(ay,az)*180/Math.PI;
+    const accPitch = Math.atan2(-ax,Math.sqrt(ay*ay+az*az))*180/Math.PI;
+    const g_raw    = Math.sqrt(ax*ax+ay*ay+az*az);
+
+    if(calibBuf.length<CALIB_N&&document.getElementById('calibOverlay').classList.contains('active')){feedCalib(g_raw);return;}
+
+    // ── Use raw gyro directly — chip DLPF already smooths it ──
+    // No JS pre-smoothing: that was adding 1-2s of lag.
+    gx_f = gx;
+    gy_f = gy;
+    gz_f = gz;
+
+    // ── Complementary filter ──
+    // 0.95/0.05: slightly more accel weight than before so fast flips
+    // converge in ~0.3s instead of 2-3s, while still rejecting accel spikes
+    const COMP = 0.95;
+    roll_f  = COMP*(roll_f  + gx_f*dt) + (1-COMP)*accRoll;
+    pitch_f = COMP*(pitch_f + gy_f*dt) + (1-COMP)*accPitch;
+    yaw_f  += gz_f*dt;  // yaw has no accel correction (no magnetometer)
+
+    // ── G-force (use hardware-computed gforce if available, else compute) ──
+    g_f+=ALPHA*((!isNaN(d.gforce)?d.gforce:g_raw)-g_f);
+    const netG=g_f-gravBase;
+
+    // ── Jerk & spin ──
+    jerk=(netG-prevNetG)/dt; prevNetG=netG;
+    spinRate=spinRate*.8+(Math.abs(gx_f)+Math.abs(gy_f)+Math.abs(gz_f))/3*.2;
+
+    // ── ALTITUDE: gyro-aided double integration ──
+    // Use net acceleration projected along rocket's up-axis, corrected by orientation
+    if(calibrated){
+      // Project acceleration onto world vertical using roll/pitch
+      const cosR=Math.cos(roll_f *Math.PI/180), sinR=Math.sin(roll_f *Math.PI/180);
+      const cosP=Math.cos(pitch_f*Math.PI/180), sinP=Math.sin(pitch_f*Math.PI/180);
+      // Vertical component of acceleration in world frame
+      const az_world = ax*sinP*(-1) + ay*(-sinR*cosP) + az*(cosR*cosP);
+      const netAz = az_world - gravBase;  // remove gravity
+      const a_ms2 = netAz * 9.80665;
+      // Apply a high-pass to velocity to fight drift (time constant ~8s)
+      vel = vel*0.9988 + a_ms2*dt;
+      alt += vel*dt;
+      if(alt<0&&vel<0&&Math.abs(netAz)<.06){alt=0;vel=0;}
+      if(alt>peakAlt)peakAlt=alt;
+      if(Math.abs(vel)>peakVel)peakVel=Math.abs(vel);
+    }
+
+    if(netG>maxG)maxG=netG;
+    if(!flightActive&&netG>.3){flightActive=true;flightStart=now;log('🚀 Launch detected!','lw');}
+    if(flightActive)impulse+=Math.abs(netG)*dt;
+
+    if(recording)recRows.push([now-recStart,ax.toFixed(5),ay.toFixed(5),az.toFixed(5),gx.toFixed(3),gy.toFixed(3),gz.toFixed(3),roll_f.toFixed(3),pitch_f.toFixed(3),yaw_f.toFixed(3),netG.toFixed(5),alt.toFixed(4),vel.toFixed(4)]);
+    packets++;
+
+    // ── Update gyro display ──
+    document.getElementById('gxVal').textContent=gx_f.toFixed(1);
+    document.getElementById('gyVal').textContent=gy_f.toFixed(1);
+    document.getElementById('gzVal').textContent=gz_f.toFixed(1);
+
+    applyFrame(ax,ay,az,roll_f,pitch_f);
+  }catch(e){
+    errors++;
+    document.getElementById('errSub').textContent='Errors: '+errors;
+  }
+}
+
+// ══════════════════════════════════════════
+//  PACKET RATE
+// ══════════════════════════════════════════
+setInterval(()=>{
+  if(pbPlaying)return;
+  const dt=(Date.now()-pktTs)/1000;
+  document.getElementById('pktRate').textContent=((packets-lastPkts)/dt).toFixed(1)+' /s';
+  lastPkts=packets;pktTs=Date.now();
+},2000);
+
+// ══════════════════════════════════════════
+//  WEB SERIAL
+// ══════════════════════════════════════════
+async function toggleConnect(){connected?await doDisconnect():await doConnect();}
+async function doConnect(){
+  if(!('serial'in navigator)){log('Web Serial not supported — use Chrome/Edge','le');return;}
+  try{
+    port=await navigator.serial.requestPort();
+    const baud=parseInt(document.getElementById('baudInput').value)||115200;
+    await port.open({baudRate:baud});
+    connected=true;
+    document.getElementById('connectBtn').textContent='DISCONNECT';
+    document.getElementById('connectBtn').classList.add('danger');
+    document.getElementById('connDot').classList.add('live');
+    document.getElementById('connLabel').textContent=baud+' BAUD';
+    document.getElementById('calibBtn').disabled=false;
+    document.getElementById('recBtn').disabled=false;
+    setStatus('idle','IDLE — RUN CALIBRATE BEFORE LAUNCH');
+    log(`Connected at ${baud} baud`,'lw');
+    readLoop();
+  }catch(e){log('Connection failed: '+e.message,'le');}
+}
+async function doDisconnect(){
+  connected=false;
+  try{if(reader){await reader.cancel();reader=null;}}catch{}
+  try{if(port){await port.close();port=null;}}catch{}
+  document.getElementById('connectBtn').textContent='CONNECT';
+  document.getElementById('connectBtn').classList.remove('danger');
+  document.getElementById('connDot').classList.remove('live');
+  document.getElementById('connLabel').textContent='OFFLINE';
+  document.getElementById('calibBtn').disabled=true;
+  document.getElementById('recBtn').disabled=true;
+  if(recording)toggleRec();
+  setStatus('waiting','DISCONNECTED');
+  log('Port closed');
+}
+async function readLoop(){
+  const dec=new TextDecoder();
+  while(port&&port.readable&&connected){
+    reader=port.readable.getReader();
+    try{while(true){const{value,done}=await reader.read();if(done)break;buf+=dec.decode(value,{stream:true});const lines=buf.split('\n');buf=lines.pop();for(const l of lines)processLine(l);}}
+    catch(e){if(connected)log('Read error: '+e.message,'le');}
+    finally{reader.releaseLock();}
+  }
+}
+
+// ══════════════════════════════════════════
+//  DEMO MODE
+// ══════════════════════════════════════════
+let demoT=0;
+function demoTick(){
+  if(connected||pbPlaying)return;
+  demoT+=0.022;
+  const ax=Math.sin(demoT*.55)*.12,ay=Math.sin(demoT*.37)*.18,az=.975+Math.sin(demoT*1.05)*.025;
+  const gr=Math.sqrt(ax*ax+ay*ay+az*az);
+  // Use accel directly in demo — no gyro available offline
+  const accRoll  = Math.atan2(ay,az)*180/Math.PI;
+  const accPitch = Math.atan2(-ax,Math.sqrt(ay*ay+az*az))*180/Math.PI;
+  roll_f  = accRoll;
+  pitch_f = accPitch;
+  g_f     +=ALPHA*(gr-g_f);
+  const netG=g_f-gravBase;
+  applyFrame(ax,ay,az,roll_f,pitch_f,netG,0,0);
+}
+setInterval(demoTick,40);
+
+// ══════════════════════════════════════════
+//  PLAYBACK ENGINE
+// ══════════════════════════════════════════
+let pbData=[];           // [{t,ax,ay,az,roll,pitch,netG,alt,vel}, ...]
+let pbIdx=0;
+let pbPlaying=false;
+let pbLastWall=null;
+let pbCurrentMs=0;
+let pbDuration=0;
+let pbAnimId=null;
+let pbSeeking=false;
+
+// ── TIMELINE CANVAS ──
+const tlCanvas=document.getElementById('timelineCanvas');
+const tlCtx=tlCanvas.getContext('2d');
+
+function resizeTL(){tlCanvas.width=tlCanvas.offsetWidth*devicePixelRatio;tlCanvas.height=tlCanvas.offsetHeight*devicePixelRatio;}
+resizeTL();window.addEventListener('resize',()=>{resizeTL();drawTimeline();});
+
+function drawTimeline(){
+  if(!pbData.length)return;
+  resizeTL();
+  const w=tlCanvas.width,h=tlCanvas.height;
+  tlCtx.clearRect(0,0,w,h);
+
+  // Background
+  tlCtx.fillStyle='rgba(0,0,0,.5)';tlCtx.fillRect(0,0,w,h);
+
+  // G-force waveform as background fill
+  const maxNG=Math.max(...pbData.map(d=>Math.abs(d.netG)),.5);
+  const grad=tlCtx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0,'rgba(255,77,0,.5)');
+  grad.addColorStop(.5,'rgba(255,184,0,.3)');
+  grad.addColorStop(1,'rgba(0,255,136,.1)');
+
+  tlCtx.beginPath();
+  pbData.forEach((d,i)=>{
+    const x=(d.t/pbDuration)*w;
+    const y=h-Math.min(Math.abs(d.netG)/maxNG,1)*h*.85-h*.05;
+    i===0?tlCtx.moveTo(x,y):tlCtx.lineTo(x,y);
+  });
+  tlCtx.lineTo(w,h);tlCtx.lineTo(0,h);tlCtx.closePath();
+  tlCtx.fillStyle=grad;tlCtx.fill();
+
+  // Altitude as secondary line
+  const maxAlt=Math.max(...pbData.map(d=>d.alt),.1);
+  tlCtx.beginPath();
+  pbData.forEach((d,i)=>{
+    const x=(d.t/pbDuration)*w;
+    const y=h-Math.min(d.alt/maxAlt,1)*h*.7-h*.1;
+    i===0?tlCtx.moveTo(x,y):tlCtx.lineTo(x,y);
+  });
+  tlCtx.strokeStyle='rgba(176,106,255,.7)';tlCtx.lineWidth=1.5*devicePixelRatio;tlCtx.stroke();
+
+  // G-force line
+  tlCtx.beginPath();
+  pbData.forEach((d,i)=>{
+    const x=(d.t/pbDuration)*w;
+    const y=h-Math.min(Math.abs(d.netG)/maxNG,1)*h*.85-h*.05;
+    i===0?tlCtx.moveTo(x,y):tlCtx.lineTo(x,y);
+  });
+  tlCtx.strokeStyle='rgba(255,184,0,.85)';tlCtx.lineWidth=1.5*devicePixelRatio;tlCtx.stroke();
+
+  // Time grid lines
+  const interval=pbDuration>60000?10000:pbDuration>20000?5000:pbDuration>5000?1000:500;
+  tlCtx.strokeStyle='rgba(26,39,68,.6)';tlCtx.lineWidth=1;
+  for(let t=0;t<=pbDuration;t+=interval){
+    const x=(t/pbDuration)*w;
+    tlCtx.beginPath();tlCtx.moveTo(x,0);tlCtx.lineTo(x,h);tlCtx.stroke();
+  }
+
+  // Legend
+  tlCtx.font=`${9*devicePixelRatio}px Share Tech Mono`;
+  tlCtx.fillStyle='rgba(255,184,0,.8)';tlCtx.textAlign='left';
+  tlCtx.fillText('G',4*devicePixelRatio,14*devicePixelRatio);
+  tlCtx.fillStyle='rgba(176,106,255,.8)';
+  tlCtx.fillText('ALT',14*devicePixelRatio,14*devicePixelRatio);
+}
+
+// ── LOAD CSV ──
+function loadCSV(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const lines=e.target.result.split('\n').filter(l=>l.trim());
+      const headers=lines[0].split(',');
+      // detect column indices
+      const ci=n=>headers.findIndex(h=>h.trim()===n);
+      const iT=ci('time_ms'),iAX=ci('ax_g'),iAY=ci('ay_g'),iAZ=ci('az_g'),
+            iR=ci('roll_deg'),iP=ci('pitch_deg'),iNG=ci('net_g'),iAlt=ci('alt_m'),iVel=ci('vel_ms');
+      if(iT<0||iAX<0){log('Invalid CSV — expected rocket_XXXX.csv format','le');return;}
+      pbData=lines.slice(1).map(l=>{
+        const c=l.split(',');
+        return{
+          t:parseFloat(c[iT])||0,
+          ax:parseFloat(c[iAX])||0, ay:parseFloat(c[iAY])||0, az:parseFloat(c[iAZ])||0,
+          roll:parseFloat(c[iR])||0, pitch:parseFloat(c[iP])||0,
+          netG:parseFloat(c[iNG])||0, alt:parseFloat(c[iAlt])||0, vel:parseFloat(c[iVel])||0
+        };
+      }).filter(d=>!isNaN(d.t));
+      if(pbData.length<2){log('Not enough data in CSV','le');return;}
+      pbDuration=pbData[pbData.length-1].t;
+      pbCurrentMs=0;pbIdx=0;
+      drawTimeline();
+      updateTimelineLabels();
+      document.getElementById('pbPlayBtn').disabled=false;
+      document.getElementById('pbStopBtn').disabled=false;
+      document.getElementById('pbInfo').textContent=`${file.name} · ${pbData.length} frames · ${(pbDuration/1000).toFixed(2)}s`;
+      log(`✓ Loaded ${pbData.length} frames from ${file.name}`,'lw');
+      pbSeekTo(0);
+    }catch(ex){log('CSV parse error: '+ex.message,'le');}
+  };
+  reader.readAsText(file);
+  input.value='';
+}
+
+function updateTimelineLabels(){
+  if(!pbDuration)return;
+  const labels=document.getElementById('timelineLabels').children;
+  for(let i=0;i<labels.length;i++){
+    const t=(i/(labels.length-1))*pbDuration/1000;
+    labels[i].textContent=t.toFixed(1)+'s';
+  }
+}
+
+// ── PLAYBACK CONTROLS ──
+function pbTogglePlay(){
+  if(!pbData.length)return;
+  if(pbPlaying){pbPause();}else{pbPlay();}
+}
+function pbPlay(){
+  pbPlaying=true;
+  pbLastWall=performance.now();
+  document.getElementById('pbPlayBtn').textContent='⏸ PAUSE';
+  setStatus('playback','▶ PLAYBACK');
+  log('▶ Playback started');
+  pbTick();
+}
+function pbPause(){
+  pbPlaying=false;
+  if(pbAnimId){cancelAnimationFrame(pbAnimId);pbAnimId=null;}
+  document.getElementById('pbPlayBtn').textContent='▶ PLAY';
+  setStatus('idle','PAUSED');
+  log('⏸ Playback paused');
+}
+function pbStop(){
+  pbPlaying=false;
+  if(pbAnimId){cancelAnimationFrame(pbAnimId);pbAnimId=null;}
+  pbCurrentMs=0;pbIdx=0;
+  document.getElementById('pbPlayBtn').textContent='▶ PLAY';
+  document.getElementById('pbPlayBtn').disabled=pbData.length===0;
+  document.getElementById('timelineCursor').style.left='0%';
+  document.getElementById('pbTimecode').textContent='00:00.0 / '+(pbData.length?fmtMs(pbDuration):'--:--.--');
+  if(!connected)setStatus('waiting','STOPPED');
+}
+
+function pbTick(){
+  if(!pbPlaying)return;
+  const now=performance.now();
+  const speed=parseFloat(document.getElementById('pbSpeed').value)||1;
+  pbCurrentMs+=( now-pbLastWall)*speed;
+  pbLastWall=now;
+
+  if(pbCurrentMs>=pbDuration){pbCurrentMs=pbDuration;pbPlaying=false;document.getElementById('pbPlayBtn').textContent='▶ PLAY';log('▶ Playback finished');}
+
+  // find closest frame
+  while(pbIdx<pbData.length-1&&pbData[pbIdx+1].t<=pbCurrentMs)pbIdx++;
+  const frame=pbData[pbIdx];
+
+  // Update all panels with playback frame
+  roll_f=frame.roll;pitch_f=frame.pitch;g_f=frame.netG+gravBase;
+  alt=frame.alt;vel=frame.vel;
+  if(alt>peakAlt)peakAlt=alt;
+  if(Math.abs(vel)>peakVel)peakVel=Math.abs(vel);
+
+  applyFrame(frame.ax,frame.ay,frame.az,frame.roll,frame.pitch,frame.netG,frame.alt,frame.vel);
+
+  // Timeline cursor
+  const pct=(pbCurrentMs/pbDuration*100).toFixed(3);
+  document.getElementById('timelineCursor').style.left=pct+'%';
+  document.getElementById('pbTimecode').textContent=fmtMs(pbCurrentMs)+' / '+fmtMs(pbDuration);
+
+  if(pbPlaying)pbAnimId=requestAnimationFrame(pbTick);
+}
+
+function fmtMs(ms){
+  const s=ms/1000,m=Math.floor(s/60),sec=(s%60).toFixed(1).padStart(4,'0');
+  return String(m).padStart(2,'0')+':'+sec;
+}
+
+// ── SEEK ──
+function pbSeekTo(ms){
+  pbCurrentMs=Math.max(0,Math.min(ms,pbDuration));
+  pbIdx=0;
+  while(pbIdx<pbData.length-1&&pbData[pbIdx+1].t<=pbCurrentMs)pbIdx++;
+  const frame=pbData[pbIdx];
+  if(frame){
+    roll_f=frame.roll;pitch_f=frame.pitch;
+    alt=frame.alt;vel=frame.vel;
+    applyFrame(frame.ax,frame.ay,frame.az,frame.roll,frame.pitch,frame.netG,frame.alt,frame.vel);
+  }
+  const pct=(pbCurrentMs/pbDuration*100).toFixed(3);
+  document.getElementById('timelineCursor').style.left=pct+'%';
+  document.getElementById('pbTimecode').textContent=fmtMs(pbCurrentMs)+' / '+fmtMs(pbDuration);
+}
+
+function pbSeekStart(e){
+  if(!pbData.length)return;
+  pbSeeking=true;
+  const wasPLaying=pbPlaying;
+  if(pbPlaying)pbPause();
+  function doSeek(ev){
+    const wrap=document.getElementById('timelineWrap');
+    const rect=wrap.getBoundingClientRect();
+    const clientX=ev.touches?ev.touches[0].clientX:ev.clientX;
+    const frac=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
+    pbSeekTo(frac*pbDuration);
+  }
+  doSeek(e);
+  function onMove(ev){if(pbSeeking)doSeek(ev);}
+  function onUp(){pbSeeking=false;window.removeEventListener('mousemove',onMove);window.removeEventListener('mouseup',onUp);window.removeEventListener('touchmove',onMove);window.removeEventListener('touchend',onUp);if(wasPLaying)pbPlay();}
+  window.addEventListener('mousemove',onMove);window.addEventListener('mouseup',onUp);
+  window.addEventListener('touchmove',onMove);window.addEventListener('touchend',onUp);
+}
+
+// ══════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════
+updateBars(0);updateAHI(0,0);update3D(0,0,0);
+log('System ready — click CONNECT or LOAD CSV for playback');
+log('→ New format: AX/AY/AZ + GX/GY/GZ + G + LINK status parsed','lw');
+log('→ CALIBRATE while stationary to zero gravity and enable altitude','lw');
+</script>
+</body>
+</html>

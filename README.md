@@ -1,16 +1,16 @@
 # 🚀 ESP32 Rocket Telemetry & Flight Computer System
 
-A real-time rocket telemetry system built using **ESP32-C3**, **MPU6050/MPU6500 IMU sensors**, and **ESP-NOW Long Range (LR)** communication.
+A real-time rocket telemetry system built using **ESP32-C3**, **ESP32**, **MPU6050/MPU6500 IMU sensors**, and **ESP-NOW Long Range (LR)** communication.
 
 This system streams flight data (acceleration, gyro, and g-force) from an onboard flight computer to a ground station with low latency and improved stability for small rocket platforms.
 
 ---
 
-# 📡 System Overview
+#  System Overview
 
 This project is split into two main components:
 
-## 🛰️ Flight Computer (Sender - ESP32-C3)
+##  Flight Computer (Sender - ESP32-C3)
 - Reads IMU sensor data (MPU6050 / MPU6500 / MPU9250 compatible)
 - Applies gyro calibration at startup
 - Computes:
@@ -19,7 +19,7 @@ This project is split into two main components:
   - Total g-force magnitude
 - Sends structured telemetry packets using ESP-NOW LR mode
 
-## 📡 Ground Station (Receiver)
+##  Ground Station (Receiver)
 - Receives ESP-NOW telemetry packets
 - Tracks packet loss using packet ID sequencing
 - Detects signal loss / weak link conditions
@@ -27,7 +27,7 @@ This project is split into two main components:
 
 ---
 
-# 📦 Telemetry Packet Format (Binary Frame Structure)
+#  Telemetry Packet Format (Binary Frame Structure)
 
 The system uses a compact binary telemetry structure for efficiency:
 
@@ -55,7 +55,7 @@ struct Telemetry {
 
 ---
 
-# ⚙️ Communication System
+#  Communication System
 
 ## ESP-NOW Long Range (LR Mode)
 
@@ -75,7 +75,7 @@ The system uses ESP-NOW configured for Long Range operation:
 
 ---
 
-# 🧠 IMU Sensor Configuration
+#  IMU Sensor Configuration
 
 Supported IMUs:
 - MPU-6050 (6-axis)
@@ -90,7 +90,7 @@ Supported IMUs:
 
 ---
 
-# 📊 Flight Computation Logic
+#  Flight Computation Logic
 
 ## g-force calculation:
 
@@ -116,7 +116,7 @@ This reduces drift and improves orientation stability.
 
 ---
 
-# 📡 Packet Loss Detection
+#  Packet Loss Detection
 
 Packet loss is tracked using sequential packet IDs:
 
@@ -132,26 +132,26 @@ Loss detected: +1 packet
 
 ---
 
-# ⚡ Known Issues & Limitations
+#  Known Issues & Limitations
 
 This system is experimental and has known engineering constraints:
 
-## 🔋 Power Instability (IMPORTANT)
+##  Power Instability (IMPORTANT)
 - ESP32-C3 can brown out during RF transmission spikes
 - Long Range mode increases power demand
 - Requires stable 3.3V supply and capacitor buffering
 
-## 📡 RF Sensitivity
+##  RF Sensitivity
 - Performance depends heavily on:
   - antenna placement
   - battery noise
   - environmental interference
 
-## 🧭 Gyro Drift
+##  Gyro Drift
 - MPU sensors require calibration every boot
 - Small drift still exists over long duration flights
 
-## 📉 Packet Loss
+##  Packet Loss
 - Occasional packet loss is expected under:
   - high acceleration
   - weak power conditions
@@ -159,7 +159,7 @@ This system is experimental and has known engineering constraints:
 
 ---
 
-# 🚀 Recommended Hardware Setup
+#  Recommended Hardware Setup
 
 ## Power System:
 - 1S LiPo battery OR stable USB power bank
@@ -173,7 +173,7 @@ This system is experimental and has known engineering constraints:
 
 ---
 
-# 🧪 Status Output Example
+#  Status Output Example
 
 ```
 AX:-0.03 AY:0.01 AZ:0.99 | GX:0.02 GY:-0.01 GZ:0.00 | G:1.00 | ID:1203 | LOSS:2 | LINK:OK
@@ -181,7 +181,7 @@ AX:-0.03 AY:0.01 AZ:0.99 | GX:0.02 GY:-0.01 GZ:0.00 | G:1.00 | ID:1203 | LOSS:2 
 
 ---
 
-# 🚀 Future Improvements
+#  Future Improvements
 
 Planned upgrades:
 - Sensor fusion (Madgwick filter)
@@ -192,6 +192,46 @@ Planned upgrades:
 
 ---
 
-# 📜 License
-Open for educational and experimental aerospace use.
-Use responsibly for non-commercial rocketry and STEM learning.
+#  License
+
+This project is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)**.
+
+Copyright (c) 2026 Chahatesh
+
+---
+
+## You are free to:
+- **Share** — copy and redistribute the material in any medium or format
+- **Adapt** — remix, transform, and build upon the material
+
+---
+
+## Under the following terms:
+
+###  Attribution
+You must give appropriate credit, provide a link to the license, and indicate if changes were made.
+
+###  NonCommercial
+You may NOT use this project for commercial purposes.
+
+###  ShareAlike
+If you remix, transform, or build upon the material, you must distribute your contributions under the **same license** as the original.
+
+---
+
+##  Summary (simple version)
+You can:
+- Use it for learning
+- Modify it
+- Share improvements
+
+But you:
+- Cannot sell it
+- Cannot use it in commercial products
+- Must credit the original author
+- Must keep the same license if you modify it
+
+---
+
+## 🔗 Full License Text
+https://creativecommons.org/licenses/by-nc-sa/4.0/
